@@ -49,6 +49,18 @@ class RotaryEmbedding(nn.Module):
 
 
 @lru_cache(1)
+def _get_rope(
+    head_size: int,
+    rotary_dim: int,
+    max_position: int,
+    base: float,
+    rope_scaling: tuple | None = None,
+):
+    assert rope_scaling is None
+    rotary_emb = RotaryEmbedding(head_size, rotary_dim, max_position, base)
+    return rotary_emb
+
+
 def get_rope(
     head_size: int,
     rotary_dim: int,
@@ -56,6 +68,22 @@ def get_rope(
     base: float,
     rope_scaling: dict | None = None,
 ):
-    assert rope_scaling is None
-    rotary_emb = RotaryEmbedding(head_size, rotary_dim, max_position, base)
-    return rotary_emb
+    if rope_scaling is not None:
+        # handle transformers RoPEScalingConfig or dict
+        rope_type = getattr(rope_scaling, "rope_type", None) or (rope_scaling.get("rope_type") if isinstance(rope_scaling, dict) else None)
+        if not rope_type:
+            rope_type = getattr(rope_scaling, "type", None) or (rope_scaling.get("type") if isinstance(rope_scaling, dict) else None)
+        
+        if not rope_scaling or rope_type == "default":
+            rope_scaling = None
+        else:
+            if isinstance(rope_scaling, dict):
+                rope_scaling = tuple(sorted(rope_scaling.items()))
+            else:
+                # If it's some other object, try to convert to dict first
+                try:
+                    d = dict(rope_scaling)
+                    rope_scaling = tuple(sorted(d.items()))
+                except:
+                    rope_scaling = str(rope_scaling) # Fallback to string for hashability
+    return _get_rope(head_size, rotary_dim, max_position, base, rope_scaling)
